@@ -1,0 +1,99 @@
+# Carpet Visual Search — single source of truth for all tunables.
+# Paths are relative to this file's location (the project root) and are
+# resolved to absolute paths at load time by config.py.
+
+paths:
+  catalogue_images: data/catalogue/images      # canonical (indexed) product images, {sku}.jpg
+  lifestyle_images: data/catalogue/lifestyle    # eval-only query images, {sku}__{variant}.jpg
+  metadata_csv: data/catalogue/metadata.csv     # one row per SKU (schema in schema.py)
+  index_dir: data/index                         # dino.faiss, clip.faiss, id_map.parquet
+
+# Local ingestion source. This adapts the spec's Phase-0 (scrape a retailer) to the
+# carpet dataset already on disk. Each top-level folder is a design family; every
+# design id has a base image (canonical) plus g/l/t variants (used as eval queries).
+dataset:
+  source_dir: Dataset
+  families:
+    afshan:
+      pattern: floral            # afshan = all-over floral
+      title: "Afshan Persian Rug"
+    lachak_torang:
+      pattern: medallion         # lachak-toranj = corner-and-medallion
+      title: "Lachak Toranj Persian Rug"
+  canonical_suffix: ""           # base image (no letter suffix) is the indexed/catalogue shot
+  query_suffixes: [g, l, t]      # variants reserved as eval (lifestyle-style) queries
+  default_shape: rectangle       # all scans are rectangular
+
+models:
+  dino_name: dinov2_vitb14       # 768-d image embeddings (image->image)
+  dino_dim: 768
+  clip_name: ViT-B-32            # 512-d image+text embeddings (text->image)
+  clip_pretrained: laion2b_s34b_b79k
+  clip_dim: 512
+  image_size: 224                # multiple of 14 for DINOv2; bump to 518 for finer detail
+  # Hosted SAM3 corner service (Colab+ngrok GPU) or local Docker service. Returns
+  # {corners:[[x,y]x4]} in the sent image's pixel frame. For local compose, use
+  # http://sam3:8001/get_corners (service name + port). Update this when the
+  # remote tunnel restarts (URLs are ephemeral).
+  sam3_api_url: "http://sam3:8001/get_corners"
+  sam3_api_timeout: 60.0
+
+preprocess:
+  # Segmentation/corner backend feeding rectification (computed once/query):
+  #   none = legacy classical | grabcut = classical mask | sam3 = local facebook/sam3 (needs HF_TOKEN,
+  #   ~53s/img on CPU) | api = hosted SAM3 corner service on a GPU (fast; set models.sam3_api_url)
+  segmentation_backend: sam3
+  sam3_fallback_grabcut: true    # if a local SAM3 mask errors, degrade to a GrabCut mask (search never breaks)
+
+  use_segmentation: false        # white-out+crop background: +0.16 R@1 on phone photos but
+                                  # -0.07 on already-clean uploads. Off by default (rectify is the safe one).
+  use_rectification: true         # AUTO-ON: SAM3 mask -> top-down warp (Zhang-He aspect). Clean/top-down
+                                  # uploads detect as near-orthographic and pass through unchanged.
+  grayscale: true                # TWO-AXIS model: the DINOv2 structure index is grayscale so design
+                                  # matching is colour-blind; colour is handled separately (LAB/EMD).
+                                  # Rebuild the index after changing this.
+  use_white_balance: false       # gray-world white balance on the query (fix colour cast from phone photos)
+  use_clahe: false               # CLAHE local-contrast normalisation on the query
+
+retrieval:
+  use_tta: true                  # ON by default: multi-crop/flip averaging (+0.10 R@1 on mobile, ~neutral on clean)
+  use_reranking: false           # AQE — measured net-negative here (query drift on hard queries); left OFF
+  rerank_k: 10
+  rerank_alpha: 0.5
+  ensemble: false                # SHELVED in favour of the two-axis model below (re-enable to A/B Marqo).
+  ensemble_alpha: 0.5            # weight on DINOv2; (1-alpha) on Marqo
+
+  # Two-axis retrieval: structure (grayscale DINOv2, cosine) + colour (LAB KMeans palette,
+  # Earth-Mover's Distance with CIEDE2000 cost). The user controls the blend with a slider.
+  two_axis: true
+  color_alpha: 0.8               # weight on DESIGN/structure; (1-alpha) on COLOUR. 1.0=pure design, 0.0=pure colour.
+                                 # 0.8 default: the alpha-sweep showed design dominates relevance (R@1 .69 @1.0 vs .32 @0.6);
+                                 # colour stays one slider-drag away for "match by colour" intent.
+
+search:
+  default_top_k: 12
+  overfetch_factor: 5            # fetch top_k * factor before post-search metadata filtering
+
+eval:
+  ks: [1, 5, 10]
+  synth_seed: 42
+  synth_per_sku: 1
+
+attributes:
+  auto_tag: false          # run CLIP zero-shot attribute tagging during ingest
+  palette_size: 3          # top-N dominant colours stored in `palette`
+  min_confidence: 0.0      # below this softmax prob, leave a zero-shot attribute blank (0 = always fill)
+
+ui:
+  # trustworthy facets only; material/has_medallion/has_border are stored but excluded
+  # (CLIP zero-shot material is silk-biased, medallion under-detects, border is ~all "yes").
+  facets: [color, shape, pattern, style]
+  show_explanations: true  # show a "why similar" line under image results
+
+# Scrape config is retained so a real retailer can be plugged in later; the working
+# data path for this prototype is local ingestion (see dataset: above).
+scrape:
+  retailer: retailer_x
+  max_items: 1500
+  rate_limit_seconds: 1.5
+  user_agent: "carpet-search-prototype/0.1"

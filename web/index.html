@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TAPIS · Carpet Visual Atelier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- ambient layers -->
+  <div class="aurora" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- custom cursor -->
+  <div class="cursor-dot" id="cursor-dot" aria-hidden="true"></div>
+  <div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>
+
+  <!-- scroll progress -->
+  <div class="scroll-prog" id="scroll-prog" aria-hidden="true"></div>
+
+  <!-- intro preloader -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="pl-word"><span>T</span><span>A</span><span>P</span><span>I</span><span>S</span><span class="brand-dot">.</span></div>
+    <div class="pl-bar"><i id="pl-fill"></i></div>
+  </div>
+
+  <!-- NAV -->
+  <header class="nav" id="nav">
+    <a class="brand" href="#top" data-cursor="link">TAPIS<span class="brand-dot">.</span></a>
+    <nav class="nav-links">
+      <a href="#results" data-cursor="link">Collection</a>
+      <a href="#hero" data-cursor="link">Visual Search</a>
+      <a href="#about" data-cursor="link">Atelier</a>
+    </nav>
+    <a class="nav-cta magnetic" href="#hero" data-cursor="link">Search by image</a>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero" id="hero">
+      <!-- Living Atelier: a 3D environment of carpets floating in atmospheric fog -->
+      <canvas id="atelier-gl" class="atelier-gl" aria-hidden="true"></canvas>
+      <div class="hero-veil" aria-hidden="true"></div>
+
+      <div class="hero-copy">
+        <p class="eyebrow reveal-up">Visual Atelier · Find by sight</p>
+        <h1 class="hero-title">
+          <span class="line"><span class="line-i">The rug you</span></span>
+          <span class="line"><span class="line-i">pictured, <em>found.</em></span></span>
+        </h1>
+        <p class="hero-sub reveal-up" style="--d:.5s">
+          Upload a photo of any carpet — or describe one in words — and our visual engine
+          surfaces the closest pieces from the collection, matched on pattern, palette and form.
+        </p>
+
+        <div class="search reveal-up" style="--d:.62s">
+          <div class="search-bar">
+            <input id="text-query" type="text" placeholder="Describe a rug — e.g. ornate floral medallion, warm tones" data-cursor="text" />
+            <button id="text-btn" class="btn-primary magnetic" data-cursor="link">Search</button>
+          </div>
+
+          <div class="search-or"><span>or</span></div>
+
+          <label class="dropzone" id="dropzone" tabindex="0" data-cursor="drop">
+            <input type="file" id="file-input" accept="image/*" hidden />
+            <div class="dz-inner">
+              <svg viewBox="0 0 24 24" class="dz-icon" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="dz-text"><strong>Drop a carpet photo</strong> or click to upload</span>
+              <span class="dz-hint">JPG / PNG · a phone snapshot works</span>
+            </div>
+            <img id="query-preview" class="query-preview" alt="" hidden />
+          </label>
+
+          <div class="match-by" id="match-by" title="Applies to photo search">
+            <div class="mb-head">
+              <span class="mb-label">Match a photo by</span>
+              <span class="mb-val"><b id="mb-design">80%</b> design&nbsp;·&nbsp;<b id="mb-color">20%</b> colour</span>
+            </div>
+            <input id="alpha" type="range" min="0" max="100" value="80" step="5"
+                   aria-label="Weight: design versus colour" data-cursor="text" />
+            <div class="mb-ends"><span>All colour</span><span>All design</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scroll-cue reveal-up" style="--d:.9s"><span>Drag &amp; explore · scroll on</span><i></i></div>
+    </section>
+
+    <!-- KINETIC MARQUEE — a working query surface (design vocab / colour vocab) -->
+    <section class="marquee" id="marquee">
+      <div class="marquee-row"><div class="marquee-track" id="mq-design"></div></div>
+      <div class="marquee-row"><div class="marquee-track rev" id="mq-color"></div></div>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="results" id="results">
+      <div class="results-head reveal-up">
+        <div>
+          <p class="eyebrow" id="results-eyebrow">The Collection</p>
+          <h2 class="results-title" id="results-title">Featured pieces</h2>
+        </div>
+        <div class="results-tools">
+          <button id="view-toggle" class="view-toggle" data-cursor="link" hidden>◴&nbsp; Map view</button>
+          <div class="filters" id="filters"><!-- facet selects injected here --></div>
+        </div>
+      </div>
+
+      <p class="status" id="status" hidden></p>
+
+      <!-- Segment + rectify: shows the customer's photo straightened to a top-down view -->
+      <div class="rectify-panel" id="rectify-panel" hidden>
+        <figure class="rx-fig">
+          <img id="rx-before" alt="your photo" />
+          <figcaption>Your photo</figcaption>
+        </figure>
+        <span class="rx-arrow" aria-hidden="true">→</span>
+        <figure class="rx-fig" id="rx-after-fig">
+          <img id="rx-after" alt="top-down view" />
+          <figcaption id="rx-after-cap">Top-down</figcaption>
+        </figure>
+        <span class="rx-note" id="rx-note" hidden></span>
+      </div>
+
+      <div class="grid" id="grid"></div>
+
+      <!-- The Atlas: ~1937 rugs positioned by REAL DINOv2/LAB similarity -->
+      <div class="atlas-stage" id="atlas-stage" hidden>
+        <canvas id="atlas-gl"></canvas>
+        <div class="atlas-hint">drag to pan · scroll to zoom · the slider morphs design ↔ colour</div>
+        <div id="atlas-label" class="atlas-label" hidden></div>
+      </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="about" id="about">
+      <div class="about-inner reveal-up">
+        <p class="eyebrow light">The Atelier</p>
+        <h2 class="about-title">Search the way you see.</h2>
+        <p>
+          Every piece is read on two independent axes — <em>design</em>, via a self-supervised
+          vision model (DINOv2) that reads pattern and structure in grayscale, and <em>colour</em>,
+          via a perceptual palette compared with optimal transport. A single slider lets you weight
+          one against the other, because “find this design” and “find this colour” are different
+          searches. Type instead of upload, and a vision-language model (CLIP) reads your words.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <!-- The Living Search: query morphs into its #1 match (signature interaction) -->
+  <div class="morph" id="morph" aria-hidden="true">
+    <div class="morph-card">
+      <img id="morph-q" class="morph-layer" alt="" />
+      <div id="morph-word" class="morph-word"></div>
+      <img id="morph-m" class="morph-layer morph-match" alt="" />
+    </div>
+    <div class="morph-meta"><span id="morph-pct">0</span><span class="morph-unit">% match</span><em id="morph-axis"></em></div>
+  </div>
+
+  <footer class="foot">
+    <span class="brand">TAPIS<span class="brand-dot">.</span></span>
+    <span class="foot-note">Visual carpet retrieval · DINOv2 · CLIP · FAISS</span>
+  </footer>
+
+  <script src="https://unpkg.com/three@0.149.0/build/three.min.js" defer></script>
+  <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

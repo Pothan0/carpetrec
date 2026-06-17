@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+transformers
+torch
+huggingface_hub
+pillow
+numpy
+opencv-python-headless
+httpx

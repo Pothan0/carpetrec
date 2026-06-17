@@ -1,0 +1,28 @@
+version: "3.8"
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+    depends_on:
+      - sam3
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  sam3:
+    build:
+      context: .
+      dockerfile: docker/sam3/Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./:/app
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - SAM3_MODEL=${SAM3_MODEL}
+      - SAM3_PROMPT=${SAM3_PROMPT}

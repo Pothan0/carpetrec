@@ -1,0 +1,238 @@
+# Carpet Visual Search
+
+An end-to-end **content-based image retrieval (CBIR)** prototype: upload a carpet photo
+(primary) or type a text query (secondary) and get back the most visually-similar
+carpets from a local catalogue, in a Gradio web UI.
+
+- **Image→image** similarity via **DINOv2** (768-d) — the primary capability.
+- **Text→image** search via **CLIP** / open_clip (512-d).
+- **FAISS** exact inner-product index over L2-normalised vectors (= cosine).
+- **AI attribute extraction**: colour/palette, shape, and CLIP zero-shot pattern/style
+  auto-tagged per rug (no extra model — reuses the CLIP encoder + classical CV).
+- **Gradio** UI with upload box, text box, config-driven facet filters, attribute tiles,
+  and a "why similar" explanation per result.
+- **Eval harness**: recall@{1,5,10} + mAP on synthetic, real-variant, and mobile query sets,
+  with a regression-baseline guard and an A/B workbench.
+
+Runs locally on CPU (CUDA/MPS used automatically if present).
+
+---
+
+## Dataset adaptation
+
+This prototype was built against a local Persian-carpet image set rather than a scraped
+retailer (the spec's Phase 0). Key adaptation decisions:
+
+- **Source**: `Dataset/<family>/NNN[suffix].<ext>` with two design families —
+  `afshan` (all-over floral) and `lachak_torang` (corner-and-medallion).
+- **SKU = one per design** (`afshan_001` … `lachak_torang_143`) → **284 catalogue SKUs**.
+  The base image (`NNN.jpg`, no suffix) is the canonical, **indexed** shot.
+- **Variants `g`/`l`/`t` become the real eval query set** — the same physical rug under
+  different image conditions (a genuine query↔gallery domain gap), copied to
+  `data/catalogue/lifestyle/{sku}__{variant}.jpg`. They are **never indexed**.
+- **Metadata** (`metadata.csv`): `pattern` (afshan→floral, lachak_torang→medallion) and
+  `shape` (rectangle) come from config; `color` is **derived from each image**
+  (grayscale-aware). `size`/`material`/`price`/`source_url` are genuinely unknown for this
+  dataset and are left blank rather than fabricated.
+- **Caveat**: many scans are **grayscale**, so CLIP **colour** text-queries ("red rug")
+  are unreliable. **Pattern/structure** queries ("floral medallion persian rug") work, and
+  **image→image** (the primary capability) is unaffected.
+
+A scraper **framework** (`src/carpet_search/scrape/`) is included per the spec so a real
+retailer can be plugged in later by implementing one subclass (`retailer_x.py`).
+
+---
+
+## Setup
+
+```bash
+python -m venv .venv
+# Windows PowerShell:
+.\.venv\Scripts\Activate.ps1
+# macOS/Linux:
+# source .venv/bin/activate
+
+pip install -r requirements.txt
+pip install -e .          # makes the carpet_search package importable
+```
+
+First run downloads model weights (DINOv2 from torch.hub, CLIP from open_clip) — a few
+hundred MB, cached afterwards. Requires internet on first run only.
+
+---
+
+## Run
+
+```bash
+python -m scripts.ingest         # build catalogue + metadata.csv from Dataset/
+python -m scripts.build_index    # embed catalogue -> dino.faiss + clip.faiss
+python -m scripts.build_marqo_index  # ensemble: add marqo.faiss (Marqo-FashionSigLIP image index)
+python -m scripts.tag_attributes # auto-tag attributes (reuses stored CLIP vectors; patches id_map, no reindex)
+python -m scripts.evaluate       # recall@k + mAP (synthetic + real query sets)
+python -m scripts.evaluate --set mobile          # mobile-photo robustness set (synthetic-mobile if no real photos)
+python -m scripts.evaluate --compare             # baseline vs gated preprocessing (seg/rect)
+python -m scripts.evaluate --baseline-json data/eval/baseline.json   # dump a regression baseline
+python -m scripts.evaluate --against data/eval/baseline.json         # print deltas vs that baseline
+python server.py                 # sleek custom web UI  -> http://127.0.0.1:8000
+python app.py                    # (alternative) Gradio UI -> http://127.0.0.1:7860
+```
+
+### Web UI (`server.py` + `web/`)
+
+A custom, editorial single-page front-end (luxury-minimalist, Arteriors-inspired: warm
+ivory + brass, Fraunces serif + Jost sans, a CSS-3D floating-carpet hero, tilt-on-hover
+result cards, scroll reveals). It's a **FastAPI** backend that wraps the unchanged
+`CarpetSearch` engine as JSON APIs (`/api/facets`, `/api/featured`, `/api/search/{text,image}`)
+and serves static `web/` assets + catalogue images. No Node/build step; fonts via Google
+Fonts with system fallbacks. The Gradio app remains as a lightweight alternative.
+
+(`python -m scripts.scrape` exercises the scraper framework; it is a template until
+`retailer_x.py` selectors are filled in. Local ingestion is the working data path.)
+
+---
+
+## Repository layout
+
+```
+carpetrec/
+├── config.yaml                # all tunables (paths, models, search, preprocess, eval)
+├── requirements.txt
+├── pyproject.toml             # editable install of the carpet_search package
+├── Dataset/                   # source images (afshan/, lachak_torang/) — local only
+├── data/
+│   ├── catalogue/{images,lifestyle}/   # generated by ingest
+│   └── index/                 # dino.faiss, clip.faiss, id_map.parquet
+├── src/carpet_search/
+│   ├── config.py  schema.py  embedding.py  preprocess.py  index.py  search.py  ingest.py
+│   ├── attributes.py          # colour/palette/shape + CLIP zero-shot attribute extraction
+│   ├── scrape/{base.py, retailer_x.py}     # scraper framework (template)
+│   └── eval/{synth.py, run_eval.py, experiments.py}   # synth+mobile sets, metrics, A/B workbench
+├── scripts/{ingest,scrape,build_index,tag_attributes,evaluate}.py
+├── server.py                  # FastAPI backend for the custom web UI
+├── web/{index.html, styles.css, app.js}   # the sleek single-page front-end
+└── app.py                     # Gradio entrypoint (alternative UI)
+```
+
+---
+
+## Config knobs (`config.yaml`)
+
+- `models.image_size` — DINOv2 input side (multiple of 14; 224 default, 518 = finer detail).
+- `search.default_top_k`, `search.overfetch_factor` — result count + pre-filter overfetch.
+- `preprocess.use_segmentation`, `preprocess.use_rectification`, `preprocess.grayscale` —
+  gated query preprocessing (off by default; evaluate with `--compare` before trusting them).
+  `grayscale` requires a rebuild after toggling.
+- `eval.ks`, `eval.synth_seed`, `eval.synth_per_sku`, `eval.synth_profile` (`default`|`mobile`).
+- `attributes.auto_tag`, `attributes.palette_size`, `attributes.min_confidence` — attribute
+  extraction settings.
+- `ui.facets` — which attribute columns render as filter dropdowns; `ui.show_explanations`.
+
+---
+
+## Results on this dataset
+
+Baseline (no query preprocessing), DINOv2 ViT-B/14 @ 224px, exact FAISS cosine:
+
+| query set | recall@1 | recall@5 | recall@10 | mAP | n |
+|---|---|---|---|---|---|
+| Synthetic (warp + floor + colour shift) | 0.222 | 0.475 | 0.588 | 0.324 | 284 |
+| Real (g/l/t variants, same rug) | 0.722 | 0.843 | 0.881 | 0.776 | 852 |
+
+The synthetic set simulates the messy query↔gallery domain gap (treat it as the honest
+hard benchmark); the real-variant set is easier (same physical rug, mild processing
+changes). Real-world performance sits between the two, nearer the synthetic number.
+
+**Phase 4 — gated query preprocessing** (250-query sample of the real set):
+
+| config | recall@1 | recall@5 | recall@10 | mAP |
+|---|---|---|---|---|
+| **baseline** | **0.736** | **0.852** | **0.896** | **0.789** |
+| +segmentation | 0.676 | 0.804 | 0.852 | 0.733 |
+| +rectification | 0.684 | 0.800 | 0.840 | 0.738 |
+| +seg +rect | 0.616 | 0.740 | 0.792 | 0.674 |
+
+**Finding:** segmentation and rectification both *reduce* recall here. These scans are flat
+and frame-filling — there is no background for GrabCut to remove (it crops real rug detail)
+and no perspective for rectification to correct (it distorts flat images). Per the spec
+("keep a step only if it improves metrics") both stay **OFF by default**; they remain behind
+config flags for datasets with genuine room/floor photos where they may help.
+
+## Mobile-photo robustness (query-side, gated)
+
+`evaluate --compare --set mobile` sweeps gated query-side techniques on a hard
+**synthetic-mobile** set (warp + floor composite + glare + motion-blur + JPEG) vs the clean
+**real** (g/l/t) set, routed through the full search pipeline (120-query sample each):
+
+| config | mobile R@1 / R@5 | clean-real R@1 / R@5 |
+|---|---|---|
+| baseline | 0.200 / 0.433 | **0.692 / 0.783** |
+| +clahe | 0.225 / 0.433 | 0.675 / 0.775 |
+| +segmentation | 0.358 / 0.617 | 0.625 / 0.692 |
+| **+tta** | 0.300 / 0.492 | 0.683 / 0.767 |
+| +seg +tta | 0.367 / 0.675 | 0.617 / 0.692 |
+| +seg +tta +clahe | **0.383** / 0.642 | 0.600 / 0.717 |
+
+**Findings & defaults:**
+- **TTA** (test-time augmentation — average embeddings of 5 query crops/flips): **+0.10 R@1 on
+  mobile, ~neutral on clean** → **ON by default** (`retrieval.use_tta: true`). A safe robustness win.
+- **Segmentation** (GrabCut, strips the floor/background): **+0.16 on mobile but −0.07 on clean** —
+  genuinely query-dependent (the exact *reversal* of the clean-scan result above). Left **OFF by
+  default**; flip `preprocess.use_segmentation: true` for phone-photo deployments.
+- **white-balance** and **AQE re-ranking** measured net-negative (colour cast was informative;
+  AQE causes query drift on hard queries) → left OFF.
+
+## Embedding ensemble (Phase 4) + path to >90%
+
+A/B of pretrained image encoders (`scripts.compare_models`, `scripts.eval_ensemble`), recall@10
+on 120-query samples:
+
+| set | DINOv2 | SigLIP2 | Marqo-FashionSigLIP | **DINOv2+Marqo ensemble** |
+|---|---|---|---|---|
+| synthetic | 0.558 | 0.792 | 0.792 | **0.875** |
+| mobile | 0.575 | 0.750 | 0.750 | **0.808** |
+| real (clean) | **0.800** | 0.550 | 0.550 | 0.758 |
+
+**Finding:** the product/fashion-tuned **Marqo-FashionSigLIP ~doubles** realistic-query recall
+vs DINOv2, and a **score-fusion ensemble** (`retrieval.ensemble: true`, `ensemble_alpha`
+weighting DINOv2 vs Marqo) is the best *pretrained* config — DINOv2's clean precision +
+Marqo's distortion robustness. It's **enabled by default** and powers image search via
+`marqo.faiss`. Self-match stays ~0.99.
+
+**Reaching >90%:** pretrained tops out at R@10 ≈ 0.88. The remaining gap needs **fine-tuning** —
+`notebooks/finetune_colab.ipynb` trains a small projection head on frozen DINOv2 using the
+same-rug variants (supervised-contrastive), held-out eval, and exports a ~2 MB head to plug
+back in. Run it on free Colab GPU.
+
+## AI attribute extraction & faceted UI
+
+`scripts.tag_attributes` auto-tags every SKU using **only the CLIP encoder we already load
+plus classical CV** (no separate VLM). It reuses the CLIP image vectors already stored in
+`clip.faiss` (no re-embedding) and patches `id_map.parquet` in place (no reindex). The app
+then renders one filter dropdown per `ui.facets` entry, shows attributes on each result
+tile, and adds a "why similar" line comparing the query's colour/shape/palette to each match.
+
+Measured accuracy on the 284-rug catalogue (honest, eval-driven):
+
+| attribute | method | result | verdict |
+|---|---|---|---|
+| colour / palette | classical (quantised dominant colours) | sensible, grayscale-aware | ✅ reliable |
+| shape / aspect | bounding-box ratio | rectangle (all scans) | ✅ reliable |
+| pattern | CLIP zero-shot (prompt-ensemble) | **80% agreement** with folder-truth | ✅ reliable |
+| style | CLIP zero-shot | persian/traditional dominate | ✅ plausible |
+| has_border | CLIP zero-shot binary | "yes" for 282/284 | ⚠️ correct but no discrimination |
+| has_medallion | CLIP zero-shot binary | only 33 "yes" (under-detects lachak) | ❌ unreliable |
+| material | CLIP zero-shot | silk-biased (252/284) | ❌ unreliable |
+
+**Decision:** only the trustworthy attributes (`colour, shape, pattern, style`) are surfaced
+as UI facets and on result tiles. `material` / `has_medallion` / `has_border` are still
+computed and stored in `metadata.csv` / `id_map.parquet`, just excluded from `ui.facets` —
+edit that list to expose them. Trustworthy material would need the Phase-6 linear probe or
+real retailer metadata; medallion is already captured reliably by the `pattern` facet.
+
+## Notes / gotchas
+
+- Vectors are L2-normalised on both ingest and query, so FAISS `IndexFlatIP` == cosine.
+- DINO and CLIP live in **separate** indices (never concatenated/averaged); queries route
+  by type (image→DINO, text→CLIP).
+- Only the clean canonical shot is indexed; lifestyle/variant images are eval queries only.
+- Keep the dataset local — product/scan images are copyrighted; do not redistribute.

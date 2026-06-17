@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TAPIS · Carpet Visual Atelier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- NAV -->
+  <header class="nav" id="nav">
+    <a class="brand" href="#top">TAPIS<span class="brand-dot">.</span></a>
+    <nav class="nav-links">
+      <a href="#results">Collection</a>
+      <a href="#hero">Visual Search</a>
+      <a href="#about">Atelier</a>
+    </nav>
+    <a class="nav-cta" href="#hero">Search by image</a>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero" id="hero">
+      <div class="hero-copy reveal">
+        <p class="eyebrow">Visual Atelier · Find by sight</p>
+        <h1 class="hero-title">The rug you pictured,<br /><em>found.</em></h1>
+        <p class="hero-sub">
+          Upload a photo of any carpet — or describe one in words — and our visual engine
+          surfaces the closest pieces from the collection, matched on pattern, palette and form.
+        </p>
+
+        <div class="search">
+          <div class="search-bar">
+            <input id="text-query" type="text" placeholder="Describe a rug — e.g. ornate floral medallion, warm tones" />
+            <button id="text-btn" class="btn-primary">Search</button>
+          </div>
+
+          <div class="search-or"><span>or</span></div>
+
+          <label class="dropzone" id="dropzone" tabindex="0">
+            <input type="file" id="file-input" accept="image/*" hidden />
+            <div class="dz-inner">
+              <svg viewBox="0 0 24 24" class="dz-icon" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="dz-text"><strong>Drop a carpet photo</strong> or click to upload</span>
+              <span class="dz-hint">JPG / PNG · a phone snapshot works</span>
+            </div>
+            <img id="query-preview" class="query-preview" alt="" hidden />
+          </label>
+
+          <div class="match-by" id="match-by" title="Applies to photo search">
+            <div class="mb-head">
+              <span class="mb-label">Match a photo by</span>
+              <span class="mb-val"><b id="mb-design">60%</b> design&nbsp;·&nbsp;<b id="mb-color">40%</b> colour</span>
+            </div>
+            <input id="alpha" type="range" min="0" max="100" value="60" step="5"
+                   aria-label="Weight: design versus colour" />
+            <div class="mb-ends"><span>All colour</span><span>All design</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3D floating carpet stack -->
+      <div class="hero-stage" id="stage" aria-hidden="true">
+        <div class="stack" id="stack">
+          <div class="rug-card r1"><img src="/catalogue/lachak_torang_002.jpg" alt="" loading="eager" /></div>
+          <div class="rug-card r2"><img src="/catalogue/lachak_torang_078.jpg" alt="" loading="eager" /></div>
+          <div class="rug-card r3"><img src="/catalogue/afshan_001.jpg" alt="" loading="eager" /></div>
+        </div>
+        <div class="stage-glow"></div>
+      </div>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="results" id="results">
+      <div class="results-head reveal">
+        <div>
+          <p class="eyebrow" id="results-eyebrow">The Collection</p>
+          <h2 class="results-title" id="results-title">Featured pieces</h2>
+        </div>
+        <div class="filters" id="filters"><!-- facet selects injected here --></div>
+      </div>
+
+      <p class="status" id="status" hidden></p>
+      <div class="grid" id="grid"></div>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="about" id="about">
+      <div class="about-inner reveal">
+        <p class="eyebrow light">The Atelier</p>
+        <h2>Search the way you see.</h2>
+        <p>
+          Every piece is read on two independent axes — <em>design</em>, via a self-supervised
+          vision model (DINOv2) that reads pattern and structure in grayscale, and <em>colour</em>,
+          via a perceptual palette compared with optimal transport. A single slider lets you weight
+          one against the other, because “find this design” and “find this colour” are different
+          searches. Type instead of upload, and a vision-language model (CLIP) reads your words.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span class="brand">TAPIS<span class="brand-dot">.</span></span>
+    <span class="foot-note">Visual carpet retrieval · DINOv2 · CLIP · FAISS</span>
+  </footer>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

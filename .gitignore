@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Data: keep the source Dataset/ and generated catalogue local, never redistribute.
+data/catalogue/images/
+data/catalogue/lifestyle/
+data/index/
+data/catalogue/metadata.csv
+
+# Logs / scratch
+pip_install.log
+*.log
+_*.py
+
+# Raw scraped retailer data (copyrighted — keep local, never redistribute)
+incoming/
+data/index/*.pt
+
+# Local rectification debug dumps
+debug/
